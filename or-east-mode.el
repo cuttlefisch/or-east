@@ -32,12 +32,6 @@
 
 (require 'org-roam)
 
-;;; Options
-;; (defcustom or-east-node-track-stats nil
-;;   "If t, track node activity information in the PROPERTIES drawer of node files.
-;; Disable this if you only want minimal information in PROPERTIES."
-;;   :type 'boolean
-;;   :group 'org-roam)
 
 (defcustom or-east-node-stat-format-time-string "%D"
   "Time-string passed to `format-time-string' when setting buffer stat properties."
@@ -149,20 +143,6 @@
 (defun or-east-node-handle-modified-time-tracking-h ()
   "Setup the current buffer to update the node-stats after saving the current file."
   (add-hook 'after-save-hook #'or-east-node-update-stats nil t))
-
-
-;; (defun or-east-node-handle-node-sync-hooks-h ()
-;;   "Add node stat tracking hooks when `or-east-node-track-stats' is enabled.
-;; Remove them when it is disabled."
-;;   (let ((enabled or-east-node-track-stats))
-;;     (cond
-;;      (enabled
-;;  (add-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
-;;  (add-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id))
-;; ;; (t
-;;  (remove-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
-;;  (remove-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id)))))
-
 
 ;;;###autoload
 (defun or-east-mode-dummy ()
