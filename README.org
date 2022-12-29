@@ -1,0 +1,5 @@
+* Org Roam Extended Attribute Stat Tracking
+The ~or-east~ package extends org-roam to support new Properties which update dynamically
+during use of the Org Roam Instance.
+
+Enable extended attribute stat tracking by activating ~or-east-mode~.
