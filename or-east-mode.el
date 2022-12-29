@@ -159,7 +159,7 @@
 (define-minor-mode or-east-mode
   "Global minor mode to Enhance the Org Roam Stat Tracking experience."
   :group 'org-roam
-  :global t
+  :global nil
   :init-value nil
   (let ((enabled or-east-mode))
     (cond

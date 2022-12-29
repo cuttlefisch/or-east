@@ -1,5 +1,38 @@
 * Org Roam Extended Attribute Stat Tracking
-The ~or-east~ package extends org-roam to support new Properties which update dynamically
-during use of the Org Roam Instance.
+~or-east~ is an experimental package that extends org-roam to support new Properties which
+update dynamically during natural use of the Org Roam Instance.
 
-Enable extended attribute stat tracking by activating ~or-east-mode~.
+* Installation & Usage
+
+This package is experimental, so install it however seems fit. Once installed, enable
+extended attribute stat tracking by activating ~or-east-mode~.
+
+#+begin_src elisp
+(use-package! or-east-mode)
+(add-hook org-mode-hook (or-east-mode 1))
+#+end_src
+
+* Status
+The project currently supports 3 additional properties at the file level. The default
+datestring is of the form "MM/DD/YY" resulting from the "%D" format string.
+ * last-accessed :: The last time this node was directly accessed. That is, when was the
+   last time this node was opened with ~org-roam-find-file~.
+ * last-linked :: The last time another node linked to this node.
+ * last-modified :: The last time the *contents* of this node were updated, excluding the
+   node's properties themselves. This works by creating a ~buffer-hash~ of the node
+   contents after the Property drawer ends.
+
+
+* Next Steps
+ * Support nodes below the file level
+     * Currently only nodes stored at the file level (~#+title~ level nodes) update their
+       accessed/linked/modified times dynamically; any valid Org Roam node should be
+       supported.
+ * Add groups for update types
+     * For example, adding a new field & its update function to a group that triggers
+       property updates upon node insertion.
+     * In general, allow easy addition of new properties & their update behavior based on
+       existing update triggers
+     * Current hooks used: ~org-roam-find-file-hook~ for access time & modification time
+       check, ~org-roam-post-node-insert-hook~ for last-linked time, and ~after-save-hook~
+       to check modification time with each save.
