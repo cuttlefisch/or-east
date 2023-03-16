@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
 ;; Homepage: https://github.com/cuttlefisch/or-east-mode
-;; Package-Requires: ((emacs "26.1") (dash "2.13") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
+;; Package-Requires: ((emacs "26.1") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -18,20 +18,19 @@
 ;;  Description
 ;;
 ;;; Code:
-(require 'dash)
-(require 'cl-lib)
 (require 'emacsql)
 (require 'emacsql-sqlite)
-
 (require 'org)
-(require 'org-attach)                   ; To set `org-attach-id-dir'
+(require 'org-attach)                   ; To set `org-attach-id-dir', but why?
 (require 'org-id)
 (require 'ol)
 (require 'org-element)
 (require 'org-capture)
-
 (require 'org-roam)
 
+;;;###autoload
+(defvar or-east-mode nil
+  "Var for or-east-mode.")
 
 (defcustom or-east-node-stat-format-time-string "%D"
   "Time-string passed to `format-time-string' when setting buffer stat properties."
@@ -42,6 +41,7 @@
   "Return timestamp formatted timestring."
   (format-time-string or-east-node-stat-format-time-string))
 
+;; TODO: This needs to recurse into all relevant org elements
 (defun or-east-node-update-stats ()
   "Update the `last-modified' property upon change to `body-hash'."
   (interactive)
@@ -58,6 +58,7 @@
                  (org-roam-node-from-id (car (org-property-values "id"))))
             (save-buffer))))
   nil)
+
 (defun or-east-node-get-string-of-file (file-path)
   "Return content of file at FILE-PATH as a string."
   (if (and file-path (file-exists-p file-path))
@@ -69,13 +70,12 @@
 
 (defun or-east-node-body-hash (&optional file-path)
   "Compute the `buffer-hash' of FILE-PATH."
-  (setq file-path (or file-path (buffer-file-name (buffer-base-buffer))))
+  (let ((file-path (or file-path (buffer-file-name (buffer-base-buffer)))))
   (save-excursion
     (with-temp-buffer
       (let ((src-text (or-east-node-get-string-of-file (or file-path nil))))
         (insert (substring src-text (cl-search "#+title" src-text)))
-        (buffer-hash)))))
-
+        (buffer-hash))))))
 
 (defun or-east-node-update-link-time-by-id (id &rest _)
   "Visit org roam node at ID and update its last-linked property."
@@ -106,6 +106,7 @@
             (org-set-property "last-linked" (or-east-node-time-string-now))))))))
   nil)
 
+;; REVIEW: this isn't used
 (defun or-east-link-replace-at-point (&optional link)
   "Replace \"roam:\" LINK at point with an \"id:\" link."
   (save-excursion
