@@ -4,17 +4,18 @@
 
 (require 'buttercup)
 
-;; Prevent org-roam from initializing a real database
+;; Stub org-roam before or-east-mode tries to (require 'org-roam).
+;; This avoids pulling in emacsql-sqlite which needs Emacs 29+ built-in SQLite.
 (defvar org-roam-directory (make-temp-file "or-east-test-roam" t))
 (defvar org-roam-db-location (expand-file-name "org-roam.db" org-roam-directory))
-
-;; Stub org-roam functions that or-east calls so we can load without a DB
-(unless (fboundp 'org-roam-buffer-p)
-  (defun org-roam-buffer-p (&rest _) nil))
-(unless (fboundp 'org-roam-node-from-id)
-  (defun org-roam-node-from-id (&rest _) nil))
-(unless (fboundp 'org-roam-node-file)
-  (defun org-roam-node-file (&rest _) nil))
+(defvar org-roam-find-file-hook nil)
+(defvar org-roam-post-node-insert-hook nil)
+(defun org-roam-buffer-p (&rest _) nil)
+(defun org-roam-node-from-id (&rest _) nil)
+(defun org-roam-node-file (&rest _) nil)
+(defun org-roam-node-from-title-or-alias (&rest _) nil)
+(defun org-roam-node-id (&rest _) nil)
+(provide 'org-roam)
 
 (require 'or-east-mode)
 

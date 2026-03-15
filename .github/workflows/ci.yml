@@ -12,6 +12,5 @@ jobs:
         with:
           version: ${{ matrix.emacs-version }}
       - uses: conao3/setup-cask@master
-      - run: sudo apt-get install -y sqlite3 libsqlite3-dev
       - run: cask install
       - run: make test
