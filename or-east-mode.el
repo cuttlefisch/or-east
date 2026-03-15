@@ -1,45 +1,46 @@
-;;; or-east-mode.el --- Description -*- lexical-binding: t; -*-
+;;; or-east-mode.el --- Org Roam Extended Attribute Stat Tracking -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2022 Hayden Stanko
+;; Copyright (C) 2022-2026 Hayden Stanko
 ;;
 ;; Author: Hayden Stanko <hayden@cuttle.codes>
 ;; Maintainer: Hayden Stanko <hayden@cuttle.codes>
 ;; Created: December 28, 2022
-;; Modified: December 28, 2022
-;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/cuttlefisch/or-east-mode
-;; Package-Requires: ((emacs "26.1") (org "9.4") (emacsql "3.0.0") (emacsql-sqlite "1.0.0") (magit-section "3.0.0"))
+;; Version: 0.1.0
+;; Keywords: convenience org-roam
+;; Homepage: https://github.com/cuttlefisch/or-east
+;; Package-Requires: ((emacs "28.1") (org-roam "2.0.0"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
 ;;
-;;  Description
+;; or-east-mode is a minor mode that automatically tracks usage statistics
+;; on org-roam nodes.  It records three properties in the node's property
+;; drawer: last-accessed, last-modified, and last-linked.  These update
+;; transparently via org-roam hooks during normal usage.
 ;;
 ;;; Code:
-(require 'emacsql)
-(require 'emacsql-sqlite)
+
 (require 'org)
-(require 'org-attach)                   ; To set `org-attach-id-dir', but why?
 (require 'org-id)
 (require 'ol)
 (require 'org-element)
-(require 'org-capture)
 (require 'org-roam)
 
-;;;###autoload
-(defvar or-east-mode nil
-  "Var for or-east-mode.")
+(defgroup or-east nil
+  "Org Roam Extended Attribute Stat Tracking."
+  :group 'org-roam
+  :prefix "or-east-")
 
 (defcustom or-east-node-stat-format-time-string "%D"
   "Time-string passed to `format-time-string' when setting buffer stat properties."
   :type 'string
-  :group 'org-roam)
+  :group 'or-east)
 
-(defun or-east-node-time-string-now ()
-  "Return timestamp formatted timestring."
-  (format-time-string or-east-node-stat-format-time-string))
+(defun or-east-node-time-string-now (&optional format-string)
+  "Return timestamp formatted timestring.
+Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
+  (format-time-string (or format-string or-east-node-stat-format-time-string)))
 
 ;; TODO: This needs to recurse into all relevant org elements
 (defun or-east-node-update-stats ()
@@ -71,11 +72,11 @@
 (defun or-east-node-body-hash (&optional file-path)
   "Compute the `buffer-hash' of FILE-PATH."
   (let ((file-path (or file-path (buffer-file-name (buffer-base-buffer)))))
-  (save-excursion
-    (with-temp-buffer
-      (let ((src-text (or-east-node-get-string-of-file (or file-path nil))))
-        (insert (substring src-text (or (string-match "#+title" src-text) 0)))
-        (buffer-hash))))))
+    (save-excursion
+      (with-temp-buffer
+        (let ((src-text (or-east-node-get-string-of-file (or file-path nil))))
+          (insert (substring src-text (or (string-match "#+title" src-text) 0)))
+          (buffer-hash))))))
 
 (defun or-east-node-update-link-time-by-id (id &rest _)
   "Visit org roam node at ID and update its last-linked property."
@@ -146,31 +147,20 @@
   (add-hook 'after-save-hook #'or-east-node-update-stats nil t))
 
 ;;;###autoload
-(defun or-east-mode-dummy ()
-  "Placeholder to test project structure."
-  (let ((enabled or-east-mode))
-    (cond
-     (enabled
-      (message "OR-EAST-MODE on"))
-     (t
-      (message "or-east-mode off")))))
-
-
-;;;###autoload
 (define-minor-mode or-east-mode
-  "Global minor mode to Enhance the Org Roam Stat Tracking experience."
-  :group 'org-roam
+  "Minor mode to track usage statistics on org-roam nodes.
+Automatically records last-accessed, last-modified, and last-linked
+timestamps in each node's property drawer."
+  :group 'or-east
   :global nil
   :init-value nil
   (let ((enabled or-east-mode))
     (cond
      (enabled
-      (message "Adding hook for or-east-mode")
       (add-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
       (add-hook 'org-roam-find-file-hook #'or-east-node-handle-modified-time-tracking-h)
       (add-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id))
      (t
-      (message "Removing hook for or-east-mode")
       (remove-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
       (remove-hook 'org-roam-find-file-hook #'or-east-node-handle-modified-time-tracking-h)
       (remove-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id)))))
@@ -188,7 +178,5 @@
   "Toggle `or-east-mode' enabled/disabled."
   (or-east-mode 'toggle))
 
-
-(provide 'or-east-mode)  ; (use-package! or-east-mode)
-                                        ;(or-east-mode)
+(provide 'or-east-mode)
 ;;; or-east-mode.el ends here
