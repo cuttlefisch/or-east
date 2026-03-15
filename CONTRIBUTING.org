@@ -1,0 +1,53 @@
+#+TITLE: Contributing to or-east
+
+Thank you for your interest in contributing!
+
+* Getting Started
+
+1. Clone the repository:
+   #+begin_src shell
+   git clone https://github.com/cuttlefisch/or-east.git
+   cd or-east
+   #+end_src
+
+2. Install [[https://github.com/cask/cask][Cask]] for dependency management.
+
+3. Install dependencies and run tests:
+   #+begin_src shell
+   cask install
+   make test
+   #+end_src
+
+* Development Workflow
+
+1. Branch from =main=.
+2. Write tests first — the project uses TDD.
+3. Run =make test= to verify all specs pass before submitting.
+4. Keep commits focused: one logical change per commit.
+
+* Code Style
+
+- All files use =lexical-binding: t=.
+- Target Emacs 28.1+ APIs.
+- Prefer built-in functions over =cl-lib= where possible.
+
+* Testing
+
+Tests use [[https://github.com/jorgenschaefer/emacs-buttercup][Buttercup]]. Test files live in =test/=:
+
+- =test/test-helper.el= — fixtures, macros (=with-or-east-test-file=), and org-roam stubs.
+- =test/test-or-east.el= — core specs.
+
+Since org-roam requires a SQLite database, tests use Buttercup spies to mock
+org-roam functions. The =with-or-east-test-file= macro creates isolated temp
+files for each test case.
+
+* Submitting Changes
+
+1. Open a pull request against =main=.
+2. Describe *what* changed and *why*.
+3. Ensure CI passes (Emacs 28.1, 29.4, and snapshot).
+
+* License
+
+All contributions are licensed under the [[file:LICENSE][GNU General Public License v3.0]].
