@@ -74,7 +74,7 @@
   (save-excursion
     (with-temp-buffer
       (let ((src-text (or-east-node-get-string-of-file (or file-path nil))))
-        (insert (substring src-text (cl-search "#+title" src-text)))
+        (insert (substring src-text (or (string-match "#+title" src-text) 0)))
         (buffer-hash))))))
 
 (defun or-east-node-update-link-time-by-id (id &rest _)
