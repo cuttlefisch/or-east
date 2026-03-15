@@ -25,7 +25,9 @@ else ifneq ($(wildcard $(STRAIGHT_DIR)/buttercup),)
 	-L $(STRAIGHT_DIR)/compat \
 	-L $(STRAIGHT_DIR)/org \
 	-L $(STRAIGHT_DIR)/transient \
-	-L $(STRAIGHT_DIR)/with-editor
+	-L $(STRAIGHT_DIR)/with-editor \
+	-L $(STRAIGHT_DIR)/llama \
+	-L $(STRAIGHT_DIR)/cond-let
 else
   $(error No test runner found. Install Cask or ensure straight.el packages are built)
 endif
