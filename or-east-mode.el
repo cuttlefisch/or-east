@@ -8,7 +8,7 @@
 ;; Version: 0.1.0
 ;; Keywords: convenience org-roam
 ;; Homepage: https://github.com/cuttlefisch/or-east
-;; Package-Requires: ((emacs "28.1") (org-roam "2.0.0"))
+;; Package-Requires: ((emacs "28.1"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
