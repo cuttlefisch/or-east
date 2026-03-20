@@ -42,7 +42,6 @@
 Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
   (format-time-string (or format-string or-east-node-stat-format-time-string)))
 
-;; TODO: This needs to recurse into all relevant org elements
 (defvar or-east--inhibit-save nil
   "Non-nil while or-east is saving, to prevent recursive hook triggers.")
 
@@ -84,14 +83,14 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
   (let ((file-path (or file-path (buffer-file-name (buffer-base-buffer)))))
     (save-excursion
       (with-temp-buffer
-        (let ((src-text (or-east-node-get-string-of-file (or file-path nil))))
+        (let ((src-text (or-east-node-get-string-of-file file-path)))
           (insert (substring src-text (or (string-match "#+title" src-text) 0)))
           (buffer-hash))))))
 
 (defun or-east-node-update-link-time-by-id (id &rest _)
   "Visit org roam node at ID and update its last-linked property."
   (save-excursion
-    (unless (eq 'string (type-of id))
+    (unless (stringp id)
       (goto-char (org-element-property :begin id))
       (setq id (org-element-property :path id))))
   (save-excursion
@@ -116,30 +115,6 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
             (org-set-property "last-linked" (or-east-node-time-string-now))))))))
   nil)
 
-;; REVIEW: this isn't used
-(defun or-east-link-replace-at-point (&optional link)
-  "Replace \"roam:\" LINK at point with an \"id:\" link."
-  (save-excursion
-    (save-match-data
-      (let* ((link (or link (org-element-context)))
-             (type (org-element-property :type link))
-             (path (org-element-property :path link))
-             (desc (and (org-element-property :contents-begin link)
-                        (org-element-property :contents-end link)
-                        (buffer-substring-no-properties
-                         (org-element-property :contents-begin link)
-                         (org-element-property :contents-end link))))
-             node)
-        (goto-char (org-element-property :begin link))
-        (when (and (org-in-regexp org-link-any-re 1)
-                   (string-equal type "roam")
-                   (setq node (save-match-data (org-roam-node-from-title-or-alias path))))
-          (progn
-            (replace-match (org-link-make-string
-                            (concat "id:" (org-roam-node-id node))
-                            (or desc path)))
-            (or-east-node-update-link-time-by-id (org-roam-node-id node))))))))
-
 (defun or-east-node-update-access-time-by-id ()
   "Update current buffer's `last-accessed' property."
   (when (and (not or-east--inhibit-save)
@@ -151,7 +126,7 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
       (or-east--save-buffer)))
   nil)
 
-(defun or-east-node-handle-modified-time-tracking-h ()
+(defun or-east--setup-modified-tracking ()
   "Setup the current buffer to update the node-stats after saving the current file."
   (add-hook 'after-save-hook #'or-east-node-update-stats nil t))
 
@@ -167,11 +142,11 @@ timestamps in each node's property drawer."
     (cond
      (enabled
       (add-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
-      (add-hook 'org-roam-find-file-hook #'or-east-node-handle-modified-time-tracking-h)
+      (add-hook 'org-roam-find-file-hook #'or-east--setup-modified-tracking)
       (add-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id))
      (t
       (remove-hook 'org-roam-find-file-hook #'or-east-node-update-access-time-by-id)
-      (remove-hook 'org-roam-find-file-hook #'or-east-node-handle-modified-time-tracking-h)
+      (remove-hook 'org-roam-find-file-hook #'or-east--setup-modified-tracking)
       (remove-hook 'org-roam-post-node-insert-hook #'or-east-node-update-link-time-by-id)))))
 
 ;;;###autoload
