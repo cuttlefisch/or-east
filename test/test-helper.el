@@ -1,5 +1,13 @@
 ;;; test-helper.el --- Test helpers for or-east -*- lexical-binding: t; -*-
 ;;; Commentary:
+;;
+;; Provides org-roam stubs, test fixtures, and helper macros for the
+;; or-east test suite.  The stubs replace org-roam's heavy dependencies
+;; (emacsql-sqlite, etc.) with no-op functions and dummy variables so
+;; that tests run without a real org-roam database.  A minimal
+;; `or-east-test-node' struct stands in for `org-roam-node' in activity
+;; scoring tests.
+;;
 ;;; Code:
 
 (require 'buttercup)

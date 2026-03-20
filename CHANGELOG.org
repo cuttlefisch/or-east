@@ -1,0 +1,35 @@
+#+TITLE: Changelog
+#+STARTUP: showall
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [[https://keepachangelog.com/en/1.1.0/][Keep a Changelog]].
+
+* Unreleased
+
+** Added
+- Comprehensive docstrings for all public and internal functions
+- =;;; Section= headers organizing =or-east-mode.el= by concern
+- Commentary sections in test files
+- =;;;###autoload= cookies for =or-east-disable= and =or-east-toggle=
+- CHANGELOG.org, CODE_OF_CONDUCT.md, .dir-locals.el
+- "How it works" section and usage examples in README
+
+** Changed
+- Renamed =or-east-node-handle-modified-time-tracking-h= to =or-east--setup-modified-tracking=
+- Replaced =(eq 'string (type-of id))= with =(stringp id)=
+- Replaced =(or file-path nil)= with =file-path=
+
+** Removed
+- Unused =or-east-link-replace-at-point= function
+- Stale TODO comment
+
+* 0.1.0 — 2022-12-28
+
+** Added
+- =or-east-mode= minor mode with automatic stat tracking
+- =last-accessed=, =last-modified=, =last-linked= property tracking
+- Body-change detection via =buffer-hash=
+- Activity scoring system with configurable weights and decay
+- =or-east-node-sort-by-activity= for =org-roam-node-find= integration
+- Buttercup test suite

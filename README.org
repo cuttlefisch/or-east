@@ -18,6 +18,29 @@ you access, modify, or link to a node — no manual bookkeeping required.
 | =last-modified= | Body content changes (detected via =buffer-hash=)     | =after-save-hook= (buffer-local)    |
 | =last-linked=   | Another node inserts a link to this node              | =org-roam-post-node-insert-hook=    |
 
+* How it works
+
+When =or-east-mode= is enabled, it installs three hooks:
+
+1. *Access tracking*: =org-roam-find-file-hook= runs
+   =or-east-node-update-access-time-by-id=, which sets =last-accessed= to the
+   current timestamp whenever you open a node.
+
+2. *Modification tracking*: The same hook also runs
+   =or-east--setup-modified-tracking=, which adds =or-east-node-update-stats= to
+   the buffer-local =after-save-hook=.  On each save, or-east computes a
+   =buffer-hash= of the file content from the =#+title= keyword onward and
+   compares it to a stored =hash= property.  If they differ, both =hash= and
+   =last-modified= are updated.  This means property-drawer-only changes (like
+   the timestamps themselves) do not trigger a modification.
+
+3. *Link tracking*: =org-roam-post-node-insert-hook= runs
+   =or-east-node-update-link-time-by-id= on the /target/ node whenever a link
+   is inserted from another node.
+
+All saves performed by or-east use an inhibit flag to prevent recursive
+=after-save-hook= triggers.
+
 * Installation
 
 ** straight.el / Doom Emacs
@@ -104,6 +127,64 @@ function directly:
 (org-roam-node-find nil nil #'or-east-node-sort-by-activity)
 #+end_src
 
+** Freshness-weighted search
+
+Use activity sorting as a tiebreaker so that equally-matched search results
+are ranked by recency:
+
+#+begin_src elisp
+;; Make org-roam-node-find default to activity-based ordering
+(setq org-roam-node-default-sort 'activity)
+#+end_src
+
+With this setting, when you type a query that matches several nodes equally
+well, the ones you've touched most recently float to the top.
+
+** Custom weight profiles
+
+Tailor the weights to your workflow.  For example, a research-heavy config
+that prioritizes discovery through links:
+
+#+begin_src elisp
+;; Research mode: heavily weight links for discovery
+(setq or-east-activity-weights
+  '((last-accessed . 0.5)
+    (last-modified . 1.0)
+    (last-linked   . 3.0)))
+#+end_src
+
+Or a daily-driver config that favors nodes you open frequently:
+
+#+begin_src elisp
+;; Daily driver: favor recently accessed nodes
+(setq or-east-activity-weights
+  '((last-accessed . 3.0)
+    (last-modified . 1.0)
+    (last-linked   . 0.5)))
+#+end_src
+
+** Agenda/dashboard integration
+
+Query nodes by activity score for a "recently active nodes" dashboard:
+
+#+begin_src elisp
+(defun my/or-east-top-nodes (&optional n)
+  "Return the top N most active org-roam nodes (default 10)."
+  (let* ((n (or n 10))
+         (nodes (org-roam-node-list))
+         (scored (sort nodes
+                       (lambda (a b)
+                         (> (or-east-node-activity-score a)
+                            (or-east-node-activity-score b))))))
+    (seq-take scored n)))
+
+;; Example: print titles of your 5 most active nodes
+(dolist (node (my/or-east-top-nodes 5))
+  (message "%s (score: %.2f)"
+           (org-roam-node-title node)
+           (or-east-node-activity-score node)))
+#+end_src
+
 * Development
 
 #+begin_src shell
@@ -112,6 +193,10 @@ make test
 #+end_src
 
 See [[file:CONTRIBUTING.org][CONTRIBUTING.org]] for full development guidelines.
+
+* Changelog
+
+See [[file:CHANGELOG.org][CHANGELOG.org]] for a list of notable changes.
 
 * License
 

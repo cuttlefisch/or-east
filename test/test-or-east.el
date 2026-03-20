@@ -1,5 +1,11 @@
 ;;; test-or-east.el --- Buttercup specs for or-east -*- lexical-binding: t; -*-
 ;;; Commentary:
+;;
+;; Buttercup test suite for or-east-mode.  Covers time formatting, file
+;; utilities, body hashing, property updates (last-accessed, last-modified),
+;; hook setup, minor mode lifecycle, customization variables, date parsing,
+;; activity scoring, and sort-by-activity integration.
+;;
 ;;; Code:
 
 (require 'test-helper)
@@ -92,12 +98,12 @@
               (expect (car (org-property-values "last-accessed")) :to-be-truthy))
           (kill-buffer))))))
 
-;;; or-east-node-handle-modified-time-tracking-h
+;;; or-east--setup-modified-tracking
 
-(describe "or-east-node-handle-modified-time-tracking-h"
+(describe "or-east--setup-modified-tracking"
   (it "adds or-east-node-update-stats to buffer-local after-save-hook"
     (with-temp-buffer
-      (or-east-node-handle-modified-time-tracking-h)
+      (or-east--setup-modified-tracking)
       (expect (memq #'or-east-node-update-stats after-save-hook) :to-be-truthy))))
 
 ;;; or-east-mode
@@ -108,7 +114,7 @@
       (or-east-mode +1)
       (expect (memq #'or-east-node-update-access-time-by-id
                     org-roam-find-file-hook) :to-be-truthy)
-      (expect (memq #'or-east-node-handle-modified-time-tracking-h
+      (expect (memq #'or-east--setup-modified-tracking
                     org-roam-find-file-hook) :to-be-truthy)
       (expect (memq #'or-east-node-update-link-time-by-id
                     org-roam-post-node-insert-hook) :to-be-truthy)
@@ -121,7 +127,7 @@
       (or-east-mode -1)
       (expect (memq #'or-east-node-update-access-time-by-id
                     org-roam-find-file-hook) :not :to-be-truthy)
-      (expect (memq #'or-east-node-handle-modified-time-tracking-h
+      (expect (memq #'or-east--setup-modified-tracking
                     org-roam-find-file-hook) :not :to-be-truthy)
       (expect (memq #'or-east-node-update-link-time-by-id
                     org-roam-post-node-insert-hook) :not :to-be-truthy)))
