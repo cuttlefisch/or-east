@@ -62,12 +62,46 @@ transparently during normal use. You can also call functions directly:
 | Variable                                | Default | Description                        |
 |-----------------------------------------+---------+------------------------------------|
 | =or-east-node-stat-format-time-string=  | ="%D"=  | Format string for timestamps (passed to =format-time-string=) |
+| =or-east-activity-weights=              | see below | Weights for each tracked property in the activity score |
+| =or-east-activity-decay-rate=           | =0.01=  | How quickly scores decay with age (higher = faster decay) |
 
 The default format ="%D"= produces dates like =03/16/26=. Change it to suit your
 preference:
 
 #+begin_src elisp
 (setq or-east-node-stat-format-time-string "%Y-%m-%d %H:%M")
+#+end_src
+
+* Activity-based search prioritization
+
+=or-east= can sort =org-roam-node-find= results by activity, so recently
+modified/accessed/linked nodes appear first. Each tracked property
+contributes a weighted, time-decayed score:
+
+#+begin_src elisp
+;; Default weights — modify contributes most, linking least
+(setq or-east-activity-weights
+  '((last-accessed . 1.0)
+    (last-modified . 2.0)
+    (last-linked   . 0.5)))
+
+;; Decay rate controls how fast old activity fades
+;; 0.01 = gradual (50% at ~100 days), 0.05 = aggressive (50% at ~20 days)
+(setq or-east-activity-decay-rate 0.01)
+#+end_src
+
+To enable activity sorting as the default for =org-roam-node-find=:
+
+#+begin_src elisp
+(setq org-roam-node-default-sort 'activity)
+#+end_src
+
+This works because =or-east= registers =org-roam-node-read-sort-by-activity=
+following org-roam's naming convention. You can also pass the sort
+function directly:
+
+#+begin_src elisp
+(org-roam-node-find nil nil #'or-east-node-sort-by-activity)
 #+end_src
 
 * Development

@@ -43,21 +43,31 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
   (format-time-string (or format-string or-east-node-stat-format-time-string)))
 
 ;; TODO: This needs to recurse into all relevant org elements
+(defvar or-east--inhibit-save nil
+  "Non-nil while or-east is saving, to prevent recursive hook triggers.")
+
+(defun or-east--save-buffer ()
+  "Save the current buffer without triggering or-east hooks recursively."
+  (when (and (buffer-modified-p)
+             (file-exists-p (buffer-file-name)))
+    (let ((or-east--inhibit-save t)
+          (after-save-hook (remq #'or-east-node-update-stats after-save-hook)))
+      (save-buffer))))
+
 (defun or-east-node-update-stats ()
   "Update the `last-modified' property upon change to `body-hash'."
   (interactive)
-  (if (org-roam-buffer-p)
-      (save-excursion
-        (let ((body-hash (or-east-node-body-hash))
-              (prev-body-hash (car (org-property-values "hash")))
-              (time-string (or-east-node-time-string-now)))
-          (goto-char (point-min))
-          (unless (and prev-body-hash (string-equal prev-body-hash body-hash))
-            (org-set-property "hash" body-hash)
-            (org-set-property "last-modified" time-string)))
-        (if (and (file-exists-p (buffer-file-name))
-                 (org-roam-node-from-id (car (org-property-values "id"))))
-            (save-buffer))))
+  (when (and (not or-east--inhibit-save)
+             (org-roam-buffer-p))
+    (save-excursion
+      (let ((body-hash (or-east-node-body-hash))
+            (prev-body-hash (car (org-property-values "hash")))
+            (time-string (or-east-node-time-string-now)))
+        (goto-char (point-min))
+        (unless (and prev-body-hash (string-equal prev-body-hash body-hash))
+          (org-set-property "hash" body-hash)
+          (org-set-property "last-modified" time-string)))
+      (or-east--save-buffer)))
   nil)
 
 (defun or-east-node-get-string-of-file (file-path)
@@ -92,12 +102,11 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
                                nil)))
       (cond
        (node-file-buffer
-        ;; Use an existing buffer is already visiting the file
+        ;; Use an existing buffer that is already visiting the file
         (with-current-buffer node-file-buffer
-          (save-buffer)
           (goto-char (point-min))
           (org-set-property "last-linked" (or-east-node-time-string-now))
-          (save-buffer (current-buffer))))
+          (or-east--save-buffer)))
        (node
         ;; No buffers currently visiting file
         (let ((file-path (org-roam-node-file node)))
@@ -133,13 +142,13 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
 
 (defun or-east-node-update-access-time-by-id ()
   "Update current buffer's `last-accessed' property."
-  (when (file-exists-p (buffer-file-name))
+  (when (and (not or-east--inhibit-save)
+             (buffer-file-name)
+             (file-exists-p (buffer-file-name)))
     (save-excursion
       (goto-char (point-min))
       (org-set-property "last-accessed" (or-east-node-time-string-now))
-      (if (and (file-exists-p (buffer-file-name))
-               (org-roam-node-from-id (car (org-property-values "id"))))
-          (save-buffer))))
+      (or-east--save-buffer)))
   nil)
 
 (defun or-east-node-handle-modified-time-tracking-h ()
@@ -177,6 +186,89 @@ timestamps in each node's property drawer."
 (defun or-east-toggle ()
   "Toggle `or-east-mode' enabled/disabled."
   (or-east-mode 'toggle))
+
+;;; Activity scoring — for search prioritization
+
+(defcustom or-east-activity-weights
+  '((last-accessed . 1.0)
+    (last-modified . 2.0)
+    (last-linked   . 0.5))
+  "Weights for computing node activity scores.
+Each entry maps a tracked property to a numeric weight.  Higher
+weight means that property contributes more to the final score.
+
+Default rationale:
+  - `last-modified' (2.0): recently edited nodes are most likely
+    to be actively relevant right now.
+  - `last-accessed' (1.0): recently opened nodes are familiar and
+    easy to navigate back to.
+  - `last-linked'   (0.5): recently linked nodes are contextually
+    related but may not need direct revisiting.
+
+Set a weight to 0.0 to ignore that property entirely.
+Add custom property names if you extend or-east with new trackers."
+  :type '(alist :key-type symbol :value-type number)
+  :group 'or-east)
+
+(defcustom or-east-activity-decay-rate 0.01
+  "Controls how quickly activity scores decay over time.
+The score for each property is computed as:
+  weight * (1 / (1 + decay-rate * age-in-days))
+
+With the default of 0.01:
+  - A node accessed today scores 1.0
+  - A node accessed 7 days ago scores ~0.93
+  - A node accessed 30 days ago scores ~0.77
+  - A node accessed 100 days ago scores ~0.50
+  - A node accessed 365 days ago scores ~0.21
+
+Lower values (e.g. 0.005) produce a flatter curve where older
+nodes remain competitive longer.  Higher values (e.g. 0.05)
+aggressively favor recent activity."
+  :type 'number
+  :group 'or-east)
+
+(defun or-east--parse-date (date-str)
+  "Parse DATE-STR in MM/DD/YY format to days since epoch, or nil if invalid."
+  (when (and date-str
+             (not (string-equal date-str "00/00/00"))
+             (string-match "\\`\\([0-9]+\\)/\\([0-9]+\\)/\\([0-9]+\\)\\'" date-str))
+    (let* ((month (string-to-number (match-string 1 date-str)))
+           (day   (string-to-number (match-string 2 date-str)))
+           (year  (+ 2000 (string-to-number (match-string 3 date-str))))
+           (time  (encode-time 0 0 0 day month year)))
+      (floor (float-time time) 86400))))
+
+(defun or-east-node-activity-score (node)
+  "Compute a weighted activity score for an org-roam NODE.
+Returns a numeric score where higher means more recently/actively used.
+The score is a weighted sum of days-since-epoch for each tracked property."
+  (let ((props (org-roam-node-properties node))
+        (today (floor (float-time) 86400))
+        (score 0.0))
+    (dolist (entry or-east-activity-weights score)
+      (let* ((key    (upcase (symbol-name (car entry))))
+             (weight (cdr entry))
+             (val    (cdr (assoc key props)))
+             (days   (or-east--parse-date val)))
+        (when days
+          (let ((age (max 0 (- today days))))
+            (setq score (+ score (* weight (/ 1.0 (1+ (* or-east-activity-decay-rate age))))))))))))
+
+(defun or-east-node-sort-by-activity (completion-a completion-b)
+  "Comparison function: sort more active nodes first.
+COMPLETION-A and COMPLETION-B are cons cells of (display-string . node)
+as produced by `org-roam-node-read--completions'.
+For use as `org-roam-node-default-sort' (via naming convention) or
+as a SORT-FN argument to `org-roam-node-read'."
+  (let ((node-a (cdr completion-a))
+        (node-b (cdr completion-b)))
+    (> (or-east-node-activity-score node-a)
+       (or-east-node-activity-score node-b))))
+
+;; Register with org-roam's naming convention so that setting
+;; (setq org-roam-node-default-sort 'activity) just works.
+(defalias 'org-roam-node-read-sort-by-activity #'or-east-node-sort-by-activity)
 
 (provide 'or-east-mode)
 ;;; or-east-mode.el ends here

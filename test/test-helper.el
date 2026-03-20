@@ -15,6 +15,18 @@
 (defun org-roam-node-file (&rest _) nil)
 (defun org-roam-node-from-title-or-alias (&rest _) nil)
 (defun org-roam-node-id (&rest _) nil)
+(defun org-roam-node-properties (&rest _) nil)
+
+;; Minimal org-roam-node struct for activity scoring tests
+(cl-defstruct (or-east-test-node (:constructor or-east-test-node-create))
+  "Minimal stand-in for org-roam-node used in tests."
+  (properties nil))
+
+;; Make org-roam-node-properties work on our test struct
+(defun org-roam-node-properties (node)
+  "Return properties alist from NODE (test stub)."
+  (or-east-test-node-properties node))
+
 (provide 'org-roam)
 
 (require 'or-east-mode)

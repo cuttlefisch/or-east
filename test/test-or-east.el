@@ -150,7 +150,121 @@
 (describe "customization"
   (it "defines or-east-node-stat-format-time-string"
     (expect (boundp 'or-east-node-stat-format-time-string) :to-be-truthy)
-    (expect or-east-node-stat-format-time-string :to-equal "%D")))
+    (expect or-east-node-stat-format-time-string :to-equal "%D"))
+
+  (it "defines or-east-activity-weights"
+    (expect (boundp 'or-east-activity-weights) :to-be-truthy)
+    (expect or-east-activity-weights :to-be-truthy)
+    (expect (assq 'last-accessed or-east-activity-weights) :to-be-truthy)
+    (expect (assq 'last-modified or-east-activity-weights) :to-be-truthy)
+    (expect (assq 'last-linked or-east-activity-weights) :to-be-truthy))
+
+  (it "defines or-east-activity-decay-rate"
+    (expect (boundp 'or-east-activity-decay-rate) :to-be-truthy)
+    (expect or-east-activity-decay-rate :to-equal 0.01)))
+
+;;; or-east--parse-date
+
+(describe "or-east--parse-date"
+  (it "parses a valid MM/DD/YY date to days since epoch"
+    (let ((days (or-east--parse-date "03/20/26")))
+      (expect days :to-be-truthy)
+      (expect (integerp days) :to-be-truthy)
+      (expect (> days 0) :to-be-truthy)))
+
+  (it "returns nil for the zero sentinel 00/00/00"
+    (expect (or-east--parse-date "00/00/00") :to-be nil))
+
+  (it "returns nil for nil input"
+    (expect (or-east--parse-date nil) :to-be nil))
+
+  (it "returns nil for empty string"
+    (expect (or-east--parse-date "") :to-be nil))
+
+  (it "returns nil for malformed dates"
+    (expect (or-east--parse-date "2026-03-20") :to-be nil)
+    (expect (or-east--parse-date "not-a-date") :to-be nil))
+
+  (it "parses dates in chronological order"
+    (let ((earlier (or-east--parse-date "01/01/25"))
+          (later   (or-east--parse-date "06/15/25")))
+      (expect earlier :to-be-truthy)
+      (expect later :to-be-truthy)
+      (expect (< earlier later) :to-be-truthy))))
+
+;;; or-east-node-activity-score
+
+(describe "or-east-node-activity-score"
+  (it "returns 0.0 for a node with no or-east properties"
+    (let ((node (or-east-test-node-create :properties '(("CATEGORY" . "test")))))
+      (expect (or-east-node-activity-score node) :to-equal 0.0)))
+
+  (it "returns 0.0 for a node with only zero-sentinel dates"
+    (let ((node (or-east-test-node-create
+                 :properties '(("LAST-ACCESSED" . "00/00/00")
+                               ("LAST-MODIFIED" . "00/00/00")
+                               ("LAST-LINKED"   . "00/00/00")))))
+      (expect (or-east-node-activity-score node) :to-equal 0.0)))
+
+  (it "returns a positive score for a node with valid dates"
+    (let ((node (or-east-test-node-create
+                 :properties '(("LAST-ACCESSED" . "03/20/26")
+                               ("LAST-MODIFIED" . "03/20/26")
+                               ("LAST-LINKED"   . "03/15/26")))))
+      (expect (> (or-east-node-activity-score node) 0.0) :to-be-truthy)))
+
+  (it "scores recently modified nodes higher than old ones"
+    (let ((recent (or-east-test-node-create
+                   :properties '(("LAST-MODIFIED" . "03/20/26"))))
+          (old    (or-east-test-node-create
+                   :properties '(("LAST-MODIFIED" . "01/01/23")))))
+      (expect (> (or-east-node-activity-score recent)
+                 (or-east-node-activity-score old))
+              :to-be-truthy)))
+
+  (it "weights last-modified higher than last-accessed"
+    (let ((modified-only (or-east-test-node-create
+                          :properties '(("LAST-MODIFIED" . "03/20/26"))))
+          (accessed-only (or-east-test-node-create
+                          :properties '(("LAST-ACCESSED" . "03/20/26")))))
+      (expect (> (or-east-node-activity-score modified-only)
+                 (or-east-node-activity-score accessed-only))
+              :to-be-truthy)))
+
+  (it "respects custom weights"
+    (let ((or-east-activity-weights '((last-accessed . 10.0)
+                                      (last-modified . 0.0)
+                                      (last-linked   . 0.0)))
+          (node (or-east-test-node-create
+                 :properties '(("LAST-ACCESSED" . "03/20/26")
+                               ("LAST-MODIFIED" . "03/20/26")))))
+      ;; With modified weight zeroed, only accessed contributes
+      (expect (> (or-east-node-activity-score node) 0.0) :to-be-truthy)))
+
+  (it "respects custom decay rate"
+    (let ((node (or-east-test-node-create
+                 :properties '(("LAST-ACCESSED" . "01/01/24")))))
+      (let* ((or-east-activity-decay-rate 0.001)
+             (slow-decay (or-east-node-activity-score node)))
+        (let* ((or-east-activity-decay-rate 0.1)
+               (fast-decay (or-east-node-activity-score node)))
+          (expect (> slow-decay fast-decay) :to-be-truthy))))))
+
+;;; or-east-node-sort-by-activity
+
+(describe "or-east-node-sort-by-activity"
+  (it "sorts more active nodes first"
+    (let* ((recent-node (or-east-test-node-create
+                         :properties '(("LAST-MODIFIED" . "03/20/26"))))
+           (old-node    (or-east-test-node-create
+                         :properties '(("LAST-MODIFIED" . "01/01/23"))))
+           (comp-a (cons "Recent" recent-node))
+           (comp-b (cons "Old" old-node)))
+      (expect (or-east-node-sort-by-activity comp-a comp-b) :to-be-truthy)
+      (expect (or-east-node-sort-by-activity comp-b comp-a) :not :to-be-truthy)))
+
+  (it "is registered as org-roam-node-read-sort-by-activity"
+    (expect (fboundp 'org-roam-node-read-sort-by-activity) :to-be-truthy)))
 
 (provide 'test-or-east)
 ;;; test-or-east.el ends here
