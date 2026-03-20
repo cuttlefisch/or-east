@@ -15,9 +15,26 @@
 ;;; Commentary:
 ;;
 ;; or-east-mode is a minor mode that automatically tracks usage statistics
-;; on org-roam nodes.  It records three properties in the node's property
-;; drawer: last-accessed, last-modified, and last-linked.  These update
-;; transparently via org-roam hooks during normal usage.
+;; on org-roam nodes.  It records three properties in each node's property
+;; drawer, updated transparently via org-roam hooks during normal usage:
+;;
+;;   - `last-accessed' — set when a node is opened via `org-roam-find-file'.
+;;     Attached to `org-roam-find-file-hook'.
+;;
+;;   - `last-modified' — set when the node body changes.  or-east computes
+;;     a `buffer-hash' of the content from the #+title keyword onward and
+;;     compares it to a stored "hash" property; the timestamp updates only
+;;     when the hash differs.  Attached to a buffer-local `after-save-hook'
+;;     installed by `or-east--setup-modified-tracking'.
+;;
+;;   - `last-linked' — set on the *target* node when another node inserts
+;;     a link to it.  Attached to `org-roam-post-node-insert-hook'.
+;;
+;; Additionally, or-east provides an activity scoring system that computes
+;; a weighted, time-decayed score from the three tracked properties.  This
+;; score can drive `org-roam-node-find' sorting so that recently active
+;; nodes appear first.  See `or-east-activity-weights' and
+;; `or-east-activity-decay-rate' for configuration.
 ;;
 ;;; Code:
 
@@ -32,29 +49,50 @@
   :group 'org-roam
   :prefix "or-east-")
 
+;;; Time formatting
+
 (defcustom or-east-node-stat-format-time-string "%D"
   "Time-string passed to `format-time-string' when setting buffer stat properties."
   :type 'string
   :group 'or-east)
 
 (defun or-east-node-time-string-now (&optional format-string)
-  "Return timestamp formatted timestring.
-Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
+  "Return the current time as a formatted string.
+Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'.
+The default format produces dates like \"03/20/26\"."
   (format-time-string (or format-string or-east-node-stat-format-time-string)))
 
+;;; Internal helpers
+
 (defvar or-east--inhibit-save nil
-  "Non-nil while or-east is saving, to prevent recursive hook triggers.")
+  "Non-nil while or-east is saving, to prevent recursive hook triggers.
+Bound to t inside `or-east--save-buffer' so that `or-east-node-update-stats'
+and `or-east-node-update-access-time-by-id' skip their work when the save
+they triggered fires `after-save-hook' again.")
 
 (defun or-east--save-buffer ()
-  "Save the current buffer without triggering or-east hooks recursively."
+  "Save the current buffer without triggering or-east hooks recursively.
+Temporarily binds `or-east--inhibit-save' to t and removes
+`or-east-node-update-stats' from the local `after-save-hook' before
+calling `save-buffer'.  This prevents the save from re-entering
+stat-update logic."
   (when (and (buffer-modified-p)
              (file-exists-p (buffer-file-name)))
     (let ((or-east--inhibit-save t)
           (after-save-hook (remq #'or-east-node-update-stats after-save-hook)))
       (save-buffer))))
 
+;;; Property updates
+
 (defun or-east-node-update-stats ()
-  "Update the `last-modified' property upon change to `body-hash'."
+  "Update the hash and last-modified properties if the node body changed.
+Computes a `buffer-hash' of the current file's body (from the #+title
+keyword onward) and compares it to the stored \"hash\" property.  When
+they differ, both \"hash\" and \"last-modified\" are set to current values
+and the buffer is saved.  Intended for use on `after-save-hook'
+\(buffer-local, installed by `or-east--setup-modified-tracking').
+Does nothing when `or-east--inhibit-save' is non-nil or the buffer
+is not an org-roam buffer."
   (interactive)
   (when (and (not or-east--inhibit-save)
              (org-roam-buffer-p))
@@ -69,8 +107,12 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
       (or-east--save-buffer)))
   nil)
 
+;;; File utilities
+
 (defun or-east-node-get-string-of-file (file-path)
-  "Return content of file at FILE-PATH as a string."
+  "Return the contents of the file at FILE-PATH as a string.
+If FILE-PATH is nil or the file does not exist, return an empty string.
+This is used by `or-east-node-body-hash' to read node files."
   (if (and file-path (file-exists-p file-path))
       (save-excursion
         (with-temp-buffer
@@ -79,7 +121,12 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
     ""))
 
 (defun or-east-node-body-hash (&optional file-path)
-  "Compute the `buffer-hash' of FILE-PATH."
+  "Compute a `buffer-hash' of the node body in FILE-PATH.
+The \"body\" is defined as everything from the first #+title keyword to
+the end of the file, so that property-drawer-only changes (like
+timestamp updates) do not count as content modifications.  If no
+#+title is found, the entire file content is hashed.
+When FILE-PATH is nil, defaults to the file backing the current buffer."
   (let ((file-path (or file-path (buffer-file-name (buffer-base-buffer)))))
     (save-excursion
       (with-temp-buffer
@@ -87,27 +134,32 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
           (insert (substring src-text (or (string-match "#+title" src-text) 0)))
           (buffer-hash))))))
 
+;;; Hook handlers
+
 (defun or-east-node-update-link-time-by-id (id &rest _)
-  "Visit org roam node at ID and update its last-linked property."
+  "Update the last-linked property on the org-roam node identified by ID.
+ID may be a string (node ID) or an org-element link object; in the
+latter case, point is moved to the element and the :path property is
+extracted as the ID string.  If the target node's file is already
+visited in a buffer, that buffer is reused; otherwise the file is
+read into a temporary buffer and written back.  Intended for use on
+`org-roam-post-node-insert-hook'."
   (save-excursion
     (unless (stringp id)
       (goto-char (org-element-property :begin id))
       (setq id (org-element-property :path id))))
   (save-excursion
     (let* ((node (org-roam-node-from-id id))
-           ;; Check if file already visited so we can reuse that buffer
            (node-file-buffer (if node
                                  (get-file-buffer (org-roam-node-file node))
                                nil)))
       (cond
        (node-file-buffer
-        ;; Use an existing buffer that is already visiting the file
         (with-current-buffer node-file-buffer
           (goto-char (point-min))
           (org-set-property "last-linked" (or-east-node-time-string-now))
           (or-east--save-buffer)))
        (node
-        ;; No buffers currently visiting file
         (let ((file-path (org-roam-node-file node)))
           (with-temp-file file-path
             (insert-file-contents file-path)
@@ -116,7 +168,10 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
   nil)
 
 (defun or-east-node-update-access-time-by-id ()
-  "Update current buffer's `last-accessed' property."
+  "Set the current buffer's last-accessed property to the current time.
+Guards against recursive saves via `or-east--inhibit-save' and verifies
+the buffer is backed by an existing file.  Intended for use on
+`org-roam-find-file-hook'."
   (when (and (not or-east--inhibit-save)
              (buffer-file-name)
              (file-exists-p (buffer-file-name)))
@@ -127,8 +182,13 @@ Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'."
   nil)
 
 (defun or-east--setup-modified-tracking ()
-  "Setup the current buffer to update the node-stats after saving the current file."
+  "Add `or-east-node-update-stats' to the buffer-local `after-save-hook'.
+This causes body-change detection and last-modified updates to run
+each time the current org-roam buffer is saved.  Intended for use on
+`org-roam-find-file-hook'."
   (add-hook 'after-save-hook #'or-east-node-update-stats nil t))
+
+;;; Minor mode
 
 ;;;###autoload
 (define-minor-mode or-east-mode
@@ -154,15 +214,17 @@ timestamps in each node's property drawer."
   "Activate `or-east-mode'."
   (or-east-mode +1))
 
+;;;###autoload
 (defun or-east-disable ()
   "Deactivate `or-east-mode'."
   (or-east-mode -1))
 
+;;;###autoload
 (defun or-east-toggle ()
   "Toggle `or-east-mode' enabled/disabled."
   (or-east-mode 'toggle))
 
-;;; Activity scoring — for search prioritization
+;;; Activity scoring
 
 (defcustom or-east-activity-weights
   '((last-accessed . 1.0)

@@ -1,5 +1,11 @@
 ;;; test-or-east.el --- Buttercup specs for or-east -*- lexical-binding: t; -*-
 ;;; Commentary:
+;;
+;; Buttercup test suite for or-east-mode.  Covers time formatting, file
+;; utilities, body hashing, property updates (last-accessed, last-modified),
+;; hook setup, minor mode lifecycle, customization variables, date parsing,
+;; activity scoring, and sort-by-activity integration.
+;;
 ;;; Code:
 
 (require 'test-helper)
