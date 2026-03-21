@@ -13,9 +13,9 @@
 ;;; or-east-node-time-string-now
 
 (describe "or-east-node-time-string-now"
-  (it "returns a formatted time string using the default format"
+  (it "returns an ISO 8601 date string by default"
     (let ((result (or-east-node-time-string-now)))
-      (expect result :to-match "^[0-9][0-9]/[0-9][0-9]/[0-9][0-9]$")))
+      (expect result :to-match "^[0-9]\\{4\\}-[0-9][0-9]-[0-9][0-9]$")))
 
   (it "accepts a custom format string"
     (let ((result (or-east-node-time-string-now "%Y")))
@@ -156,7 +156,7 @@
 (describe "customization"
   (it "defines or-east-node-stat-format-time-string"
     (expect (boundp 'or-east-node-stat-format-time-string) :to-be-truthy)
-    (expect or-east-node-stat-format-time-string :to-equal "%D"))
+    (expect or-east-node-stat-format-time-string :to-equal "%Y-%m-%d"))
 
   (it "defines or-east-activity-weights"
     (expect (boundp 'or-east-activity-weights) :to-be-truthy)
@@ -178,8 +178,22 @@
       (expect (integerp days) :to-be-truthy)
       (expect (> days 0) :to-be-truthy)))
 
+  (it "parses ISO 8601 YYYY-MM-DD dates"
+    (let ((days (or-east--parse-date "2026-03-20")))
+      (expect days :to-be-truthy)
+      (expect (integerp days) :to-be-truthy)
+      (expect (> days 0) :to-be-truthy)))
+
+  (it "parses both formats to the same value for the same date"
+    (let ((us-days  (or-east--parse-date "03/20/26"))
+          (iso-days (or-east--parse-date "2026-03-20")))
+      (expect us-days :to-equal iso-days)))
+
   (it "returns nil for the zero sentinel 00/00/00"
     (expect (or-east--parse-date "00/00/00") :to-be nil))
+
+  (it "returns nil for the ISO zero sentinel 0000-00-00"
+    (expect (or-east--parse-date "0000-00-00") :to-be nil))
 
   (it "returns nil for nil input"
     (expect (or-east--parse-date nil) :to-be nil))
@@ -188,15 +202,41 @@
     (expect (or-east--parse-date "") :to-be nil))
 
   (it "returns nil for malformed dates"
-    (expect (or-east--parse-date "2026-03-20") :to-be nil)
     (expect (or-east--parse-date "not-a-date") :to-be nil))
 
-  (it "parses dates in chronological order"
+  (it "parses MM/DD/YY dates in chronological order"
     (let ((earlier (or-east--parse-date "01/01/25"))
           (later   (or-east--parse-date "06/15/25")))
       (expect earlier :to-be-truthy)
       (expect later :to-be-truthy)
+      (expect (< earlier later) :to-be-truthy)))
+
+  (it "parses ISO dates in chronological order"
+    (let ((earlier (or-east--parse-date "2025-01-01"))
+          (later   (or-east--parse-date "2025-06-15")))
+      (expect earlier :to-be-truthy)
+      (expect later :to-be-truthy)
       (expect (< earlier later) :to-be-truthy))))
+
+;;; or-east--zero-sentinel-p
+
+(describe "or-east--zero-sentinel-p"
+  (it "detects MM/DD/YY zero sentinel"
+    (expect (or-east--zero-sentinel-p "00/00/00") :to-be-truthy))
+
+  (it "detects ISO zero sentinel"
+    (expect (or-east--zero-sentinel-p "0000-00-00") :to-be-truthy))
+
+  (it "detects MM/DD/YYYY zero sentinel"
+    (expect (or-east--zero-sentinel-p "00/00/0000") :to-be-truthy))
+
+  (it "returns nil for real dates"
+    (expect (or-east--zero-sentinel-p "03/20/26") :not :to-be-truthy)
+    (expect (or-east--zero-sentinel-p "2026-03-21") :not :to-be-truthy))
+
+  (it "returns nil for nil and empty string"
+    (expect (or-east--zero-sentinel-p nil) :not :to-be-truthy)
+    (expect (or-east--zero-sentinel-p "") :not :to-be-truthy)))
 
 ;;; or-east-node-activity-score
 
@@ -212,27 +252,35 @@
                                ("LAST-LINKED"   . "00/00/00")))))
       (expect (or-east-node-activity-score node) :to-equal 0.0)))
 
-  (it "returns a positive score for a node with valid dates"
+  (it "returns a positive score for a node with valid ISO dates"
     (let ((node (or-east-test-node-create
-                 :properties '(("LAST-ACCESSED" . "03/20/26")
-                               ("LAST-MODIFIED" . "03/20/26")
-                               ("LAST-LINKED"   . "03/15/26")))))
+                 :properties '(("LAST-ACCESSED" . "2026-03-20")
+                               ("LAST-MODIFIED" . "2026-03-20")
+                               ("LAST-LINKED"   . "2026-03-15")))))
       (expect (> (or-east-node-activity-score node) 0.0) :to-be-truthy)))
+
+  (it "returns the same score for equivalent dates in different formats"
+    (let ((iso-node (or-east-test-node-create
+                     :properties '(("LAST-MODIFIED" . "2026-03-20"))))
+          (us-node  (or-east-test-node-create
+                     :properties '(("LAST-MODIFIED" . "03/20/26")))))
+      (expect (or-east-node-activity-score iso-node)
+              :to-equal (or-east-node-activity-score us-node))))
 
   (it "scores recently modified nodes higher than old ones"
     (let ((recent (or-east-test-node-create
-                   :properties '(("LAST-MODIFIED" . "03/20/26"))))
+                   :properties '(("LAST-MODIFIED" . "2026-03-20"))))
           (old    (or-east-test-node-create
-                   :properties '(("LAST-MODIFIED" . "01/01/23")))))
+                   :properties '(("LAST-MODIFIED" . "2023-01-01")))))
       (expect (> (or-east-node-activity-score recent)
                  (or-east-node-activity-score old))
               :to-be-truthy)))
 
   (it "weights last-modified higher than last-accessed"
     (let ((modified-only (or-east-test-node-create
-                          :properties '(("LAST-MODIFIED" . "03/20/26"))))
+                          :properties '(("LAST-MODIFIED" . "2026-03-20"))))
           (accessed-only (or-east-test-node-create
-                          :properties '(("LAST-ACCESSED" . "03/20/26")))))
+                          :properties '(("LAST-ACCESSED" . "2026-03-20")))))
       (expect (> (or-east-node-activity-score modified-only)
                  (or-east-node-activity-score accessed-only))
               :to-be-truthy)))
@@ -242,14 +290,14 @@
                                       (last-modified . 0.0)
                                       (last-linked   . 0.0)))
           (node (or-east-test-node-create
-                 :properties '(("LAST-ACCESSED" . "03/20/26")
-                               ("LAST-MODIFIED" . "03/20/26")))))
+                 :properties '(("LAST-ACCESSED" . "2026-03-20")
+                               ("LAST-MODIFIED" . "2026-03-20")))))
       ;; With modified weight zeroed, only accessed contributes
       (expect (> (or-east-node-activity-score node) 0.0) :to-be-truthy)))
 
   (it "respects custom decay rate"
     (let ((node (or-east-test-node-create
-                 :properties '(("LAST-ACCESSED" . "01/01/24")))))
+                 :properties '(("LAST-ACCESSED" . "2024-01-01")))))
       (let* ((or-east-activity-decay-rate 0.001)
              (slow-decay (or-east-node-activity-score node)))
         (let* ((or-east-activity-decay-rate 0.1)
@@ -261,9 +309,9 @@
 (describe "or-east-node-sort-by-activity"
   (it "sorts more active nodes first"
     (let* ((recent-node (or-east-test-node-create
-                         :properties '(("LAST-MODIFIED" . "03/20/26"))))
+                         :properties '(("LAST-MODIFIED" . "2026-03-20"))))
            (old-node    (or-east-test-node-create
-                         :properties '(("LAST-MODIFIED" . "01/01/23"))))
+                         :properties '(("LAST-MODIFIED" . "2023-01-01"))))
            (comp-a (cons "Recent" recent-node))
            (comp-b (cons "Old" old-node)))
       (expect (or-east-node-sort-by-activity comp-a comp-b) :to-be-truthy)

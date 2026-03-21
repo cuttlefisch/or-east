@@ -5,17 +5,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [[https://keepachangelog.com/en/1.1.0/][Keep a Changelog]].
 
-* Unreleased
+* 0.2.0 — 2026-03-21
 
 ** Added
+- ISO 8601 default timestamp format (=%Y-%m-%d=, e.g. =2026-03-21=)
+- Format-aware date parser: handles both ISO 8601 and legacy =MM/DD/YY= formats
+- =or-east-normalize-timestamps= command to batch-rewrite all node timestamps (including zero-sentinel normalization to =0000-00-00=)
+- =or-east--zero-sentinel-p= helper for detecting all-zeros dates in any format
 - Comprehensive docstrings for all public and internal functions
 - =;;; Section= headers organizing =or-east-mode.el= by concern
 - Commentary sections in test files
 - =;;;###autoload= cookies for =or-east-disable= and =or-east-toggle=
 - CHANGELOG.org, CODE_OF_CONDUCT.md, .dir-locals.el
 - "How it works" section and usage examples in README
+- SPDX license identifier in file header
 
 ** Changed
+- Default =or-east-node-stat-format-time-string= from ="%D"= to ="%Y-%m-%d"=
+- =or-east--parse-date= now uses =parse-time-string= with MM/DD/YY fallback instead of hardcoded regex
 - Renamed =or-east-node-handle-modified-time-tracking-h= to =or-east--setup-modified-tracking=
 - Replaced =(eq 'string (type-of id))= with =(stringp id)=
 - Replaced =(or file-path nil)= with =file-path=
