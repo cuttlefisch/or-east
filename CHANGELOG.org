@@ -10,7 +10,8 @@ The format is based on [[https://keepachangelog.com/en/1.1.0/][Keep a Changelog]
 ** Added
 - ISO 8601 default timestamp format (=%Y-%m-%d=, e.g. =2026-03-21=)
 - Format-aware date parser: handles both ISO 8601 and legacy =MM/DD/YY= formats
-- =or-east-normalize-timestamps= command to batch-rewrite all node timestamps
+- =or-east-normalize-timestamps= command to batch-rewrite all node timestamps (including zero-sentinel normalization to =0000-00-00=)
+- =or-east--zero-sentinel-p= helper for detecting all-zeros dates in any format
 - Comprehensive docstrings for all public and internal functions
 - =;;; Section= headers organizing =or-east-mode.el= by concern
 - Commentary sections in test files

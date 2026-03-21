@@ -38,6 +38,6 @@ Key config: `~/.doom.d/config.el:455` sets `org-roam-node-default-sort` to `'act
 
 - Emacs Lisp with `lexical-binding: t`
 - Package requires Emacs 28.1+
-- Tests: `make test` (uses Buttercup, 40 specs)
+- Tests: `make test` (uses Buttercup, 45 specs)
 - Test runner auto-detects straight.el (Doom) or Cask
 - Tests mock org-roam via Buttercup spies — no real database needed
