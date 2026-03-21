@@ -218,6 +218,26 @@
       (expect later :to-be-truthy)
       (expect (< earlier later) :to-be-truthy))))
 
+;;; or-east--zero-sentinel-p
+
+(describe "or-east--zero-sentinel-p"
+  (it "detects MM/DD/YY zero sentinel"
+    (expect (or-east--zero-sentinel-p "00/00/00") :to-be-truthy))
+
+  (it "detects ISO zero sentinel"
+    (expect (or-east--zero-sentinel-p "0000-00-00") :to-be-truthy))
+
+  (it "detects MM/DD/YYYY zero sentinel"
+    (expect (or-east--zero-sentinel-p "00/00/0000") :to-be-truthy))
+
+  (it "returns nil for real dates"
+    (expect (or-east--zero-sentinel-p "03/20/26") :not :to-be-truthy)
+    (expect (or-east--zero-sentinel-p "2026-03-21") :not :to-be-truthy))
+
+  (it "returns nil for nil and empty string"
+    (expect (or-east--zero-sentinel-p nil) :not :to-be-truthy)
+    (expect (or-east--zero-sentinel-p "") :not :to-be-truthy)))
+
 ;;; or-east-node-activity-score
 
 (describe "or-east-node-activity-score"

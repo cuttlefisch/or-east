@@ -295,6 +295,13 @@ and other formats supported by `parse-time-string'."
         (let ((time (encode-time 0 0 0 day month year)))
           (floor (float-time time) 86400))))))
 
+(defun or-east--zero-sentinel-p (date-str)
+  "Return non-nil if DATE-STR is an all-zeros sentinel date.
+Matches \"00/00/00\", \"0000-00-00\", \"00/00/0000\", etc."
+  (and (stringp date-str)
+       (string-match-p "\\`[0/-]*0[0/-]*\\'" date-str)
+       (not (string-empty-p date-str))))
+
 (defun or-east-node-activity-score (node)
   "Compute a weighted activity score for an org-roam NODE.
 Returns a numeric score where higher means more recently/actively used.
@@ -345,17 +352,21 @@ Reports the number of files updated when done."
           (dolist (prop props)
             (let* ((val (car (org-property-values prop)))
                    (days (when val (or-east--parse-date val))))
-              (when days
+              (cond
+               (days
+                ;; Valid date — reformat to current format string
                 (let ((new-val (format-time-string format-str
-                                                   (encode-time 0 0 0
-                                                                1 1 1970))))
-                  ;; Reconstruct actual date from days since epoch
-                  (setq new-val (format-time-string format-str
-                                                    (seconds-to-time (* days 86400))))
+                                                   (seconds-to-time (* days 86400)))))
                   (unless (string-equal val new-val)
                     (goto-char (point-min))
                     (org-set-property prop new-val)
-                    (setq file-modified t))))))
+                    (setq file-modified t))))
+               ((and val (or-east--zero-sentinel-p val))
+                ;; Zero sentinel in non-ISO form — normalize to 0000-00-00
+                (unless (string-equal val "0000-00-00")
+                  (goto-char (point-min))
+                  (org-set-property prop "0000-00-00")
+                  (setq file-modified t))))))
           (when file-modified
             (write-region (point-min) (point-max) file)
             (cl-incf updated-count)))))
