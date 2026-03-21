@@ -79,17 +79,18 @@ transparently during normal use. You can also call functions directly:
 
 - =or-east-enable= / =or-east-disable= — activate or deactivate the mode
 - =or-east-node-update-stats= — manually trigger a stat update (=M-x=)
+- =or-east-normalize-timestamps= — batch-rewrite all node timestamps to the current format
 
 * Configuration
 
 | Variable                                | Default | Description                        |
 |-----------------------------------------+---------+------------------------------------|
-| =or-east-node-stat-format-time-string=  | ="%D"=  | Format string for timestamps (passed to =format-time-string=) |
+| =or-east-node-stat-format-time-string=  | ="%Y-%m-%d"=  | Format string for timestamps (passed to =format-time-string=) |
 | =or-east-activity-weights=              | see below | Weights for each tracked property in the activity score |
 | =or-east-activity-decay-rate=           | =0.01=  | How quickly scores decay with age (higher = faster decay) |
 
-The default format ="%D"= produces dates like =03/16/26=. Change it to suit your
-preference:
+The default format ="%Y-%m-%d"= produces ISO 8601 dates like =2026-03-21=.
+Change it to suit your preference:
 
 #+begin_src elisp
 (setq or-east-node-stat-format-time-string "%Y-%m-%d %H:%M")

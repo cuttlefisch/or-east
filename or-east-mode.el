@@ -5,12 +5,14 @@
 ;; Author: Hayden Stanko <hayden@cuttle.codes>
 ;; Maintainer: Hayden Stanko <hayden@cuttle.codes>
 ;; Created: December 28, 2022
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Keywords: convenience org-roam
 ;; Homepage: https://github.com/cuttlefisch/or-east
 ;; Package-Requires: ((emacs "28.1"))
 ;;
 ;; This file is not part of GNU Emacs.
+;;
+;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;
 ;;; Commentary:
 ;;
@@ -51,15 +53,17 @@
 
 ;;; Time formatting
 
-(defcustom or-east-node-stat-format-time-string "%D"
-  "Time-string passed to `format-time-string' when setting buffer stat properties."
+(defcustom or-east-node-stat-format-time-string "%Y-%m-%d"
+  "Time-string passed to `format-time-string' when setting buffer stat properties.
+The default format produces ISO 8601 dates like \"2026-03-21\", which are
+unambiguous and lexicographically sortable."
   :type 'string
   :group 'or-east)
 
 (defun or-east-node-time-string-now (&optional format-string)
   "Return the current time as a formatted string.
 Optional FORMAT-STRING overrides `or-east-node-stat-format-time-string'.
-The default format produces dates like \"03/20/26\"."
+The default format produces ISO 8601 dates like \"2026-03-21\"."
   (format-time-string (or format-string or-east-node-stat-format-time-string)))
 
 ;;; Internal helpers
@@ -266,15 +270,30 @@ aggressively favor recent activity."
   :group 'or-east)
 
 (defun or-east--parse-date (date-str)
-  "Parse DATE-STR in MM/DD/YY format to days since epoch, or nil if invalid."
+  "Parse DATE-STR to days since epoch, or nil if invalid.
+Handles ISO 8601 dates (\"2026-03-21\"), US dates (\"03/21/26\"),
+and other formats supported by `parse-time-string'."
   (when (and date-str
+             (not (string-empty-p date-str))
              (not (string-equal date-str "00/00/00"))
-             (string-match "\\`\\([0-9]+\\)/\\([0-9]+\\)/\\([0-9]+\\)\\'" date-str))
-    (let* ((month (string-to-number (match-string 1 date-str)))
-           (day   (string-to-number (match-string 2 date-str)))
-           (year  (+ 2000 (string-to-number (match-string 3 date-str))))
-           (time  (encode-time 0 0 0 day month year)))
-      (floor (float-time time) 86400))))
+             (not (string-equal date-str "0000-00-00")))
+    (let (day month year)
+      ;; Try MM/DD/YY first (legacy %D format, not handled by parse-time-string)
+      (if (string-match "\\`\\([0-9]+\\)/\\([0-9]+\\)/\\([0-9]+\\)\\'" date-str)
+          (setq month (string-to-number (match-string 1 date-str))
+                day   (string-to-number (match-string 2 date-str))
+                year  (string-to-number (match-string 3 date-str)))
+        ;; Fall back to parse-time-string (handles ISO 8601 and others)
+        (let ((parsed (parse-time-string date-str)))
+          (setq day   (nth 3 parsed)
+                month (nth 4 parsed)
+                year  (nth 5 parsed))))
+      (when (and day month year (> day 0) (> month 0) (> year 0))
+        ;; Two-digit years: assume 2000s (matches old %D behavior)
+        (when (< year 100)
+          (setq year (+ 2000 year)))
+        (let ((time (encode-time 0 0 0 day month year)))
+          (floor (float-time time) 86400))))))
 
 (defun or-east-node-activity-score (node)
   "Compute a weighted activity score for an org-roam NODE.
@@ -302,6 +321,46 @@ as a SORT-FN argument to `org-roam-node-read'."
         (node-b (cdr completion-b)))
     (> (or-east-node-activity-score node-a)
        (or-east-node-activity-score node-b))))
+
+;;; Timestamp normalization
+
+;;;###autoload
+(defun or-east-normalize-timestamps ()
+  "Rewrite all or-east timestamps to the current format.
+Walks every .org file in `org-roam-directory' and normalizes
+`last-accessed', `last-modified', and `last-linked' properties to
+`or-east-node-stat-format-time-string' (default \"%Y-%m-%d\").
+Reports the number of files updated when done."
+  (interactive)
+  (let ((files (directory-files-recursively org-roam-directory "\\.org\\'"))
+        (props '("last-accessed" "last-modified" "last-linked"))
+        (format-str or-east-node-stat-format-time-string)
+        (updated-count 0))
+    (dolist (file files)
+      (let ((file-modified nil))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (org-mode)
+          (goto-char (point-min))
+          (dolist (prop props)
+            (let* ((val (car (org-property-values prop)))
+                   (days (when val (or-east--parse-date val))))
+              (when days
+                (let ((new-val (format-time-string format-str
+                                                   (encode-time 0 0 0
+                                                                1 1 1970))))
+                  ;; Reconstruct actual date from days since epoch
+                  (setq new-val (format-time-string format-str
+                                                    (seconds-to-time (* days 86400))))
+                  (unless (string-equal val new-val)
+                    (goto-char (point-min))
+                    (org-set-property prop new-val)
+                    (setq file-modified t))))))
+          (when file-modified
+            (write-region (point-min) (point-max) file)
+            (cl-incf updated-count)))))
+    (message "or-east: normalized timestamps in %d file%s"
+             updated-count (if (= updated-count 1) "" "s"))))
 
 ;; Register with org-roam's naming convention so that setting
 ;; (setq org-roam-node-default-sort 'activity) just works.
